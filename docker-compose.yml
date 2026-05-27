@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: panini
+      POSTGRES_USER: panini
+      POSTGRES_PASSWORD: panini
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U panini -d panini"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8501:8501"
+    environment:
+      DATABASE_URL: postgresql+psycopg://panini:panini@db:5432/panini
+      APP_ENV: local
+    volumes:
+      - ./data:/app/data
+      - ./source_excel.xlsx:/app/source_excel.xlsx:ro
+    command: streamlit run app.py --server.address=0.0.0.0
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://panini:panini@db:5432/panini
+      APP_ENV: local
+    volumes:
+      - ./data:/app/data
+      - ./source_excel.xlsx:/app/source_excel.xlsx:ro
+      - ./source_names.txt:/app/source_names.txt:ro
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+
+  web:
+    build:
+      context: ./frontend
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_BACKEND_URL: http://api:8000
+
+volumes:
+  postgres_data:

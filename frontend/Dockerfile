@@ -1,0 +1,17 @@
+FROM node:20-slim
+
+WORKDIR /app
+
+ENV NEXT_TELEMETRY_DISABLED=1
+ARG NEXT_BACKEND_URL=http://api:8000
+ENV NEXT_BACKEND_URL=$NEXT_BACKEND_URL
+
+COPY package.json package-lock.json* ./
+RUN npm install
+
+COPY . .
+RUN npm run build
+
+EXPOSE 3000
+
+CMD ["npm", "run", "start"]
