@@ -11,7 +11,13 @@ from src.config import settings
 from src.models import Base
 
 
-engine = create_engine(settings.database_url, pool_pre_ping=True, future=True)
+def _engine_options() -> dict:
+    if settings.database_url.startswith("postgresql"):
+        return {"connect_args": {"options": "-csearch_path=public"}}
+    return {}
+
+
+engine = create_engine(settings.database_url, pool_pre_ping=True, future=True, **_engine_options())
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, future=True)
 
 
@@ -38,4 +44,3 @@ def get_session() -> Generator[Session, None, None]:
         raise
     finally:
         session.close()
-
