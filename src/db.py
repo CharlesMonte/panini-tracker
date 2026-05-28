@@ -33,7 +33,6 @@ def _set_sqlite_pragma(dbapi_connection, connection_record) -> None:
 def init_db() -> None:
     if engine.url.get_backend_name().startswith("postgresql"):
         with engine.begin() as connection:
-            connection.execute(text("CREATE SCHEMA IF NOT EXISTS public"))
             connection.execute(text("SET search_path TO public"))
             Base.metadata.create_all(bind=connection)
         return

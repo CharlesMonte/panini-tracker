@@ -70,6 +70,8 @@ SET search_path TO public;
 SQL
 ```
 
+Si cette commande échoue avec `permission denied for database ...` sur `CREATE SCHEMA`, utilisez la console SQL Northflank ou l'utilisateur propriétaire/admin de l'addon PostgreSQL pour recréer le schéma. Le rôle utilisé par le service `api` n'a pas toujours le droit de créer des schémas dans la base, même s'il peut lire/écrire les tables existantes.
+
 Restaurer ensuite le dump :
 
 ```bash
@@ -102,14 +104,23 @@ le schéma `public` existe mal, n'a pas les bons droits, ou n'est pas dans le `s
 
 ```bash
 docker run --rm -i postgres:16 psql "DATABASE_URL_NORTHFLANK" <<'SQL'
-CREATE SCHEMA IF NOT EXISTS public;
 GRANT USAGE, CREATE ON SCHEMA public TO CURRENT_USER;
 ALTER ROLE CURRENT_USER SET search_path TO public;
 SET search_path TO public;
+SHOW search_path;
+SELECT current_schema();
 SQL
 ```
 
-Le code API force aussi `search_path=public` côté connexion PostgreSQL, mais la réparation SQL reste utile si la base a été recréée manuellement.
+Cette commande suppose que le schéma `public` existe déjà. Si `public` a été supprimé et que cette commande échoue, recréer d'abord le schéma depuis la console SQL Northflank ou avec l'utilisateur propriétaire de l'addon :
+
+```sql
+CREATE SCHEMA public;
+GRANT USAGE, CREATE ON SCHEMA public TO <utilisateur_api>;
+ALTER ROLE <utilisateur_api> SET search_path TO public;
+```
+
+Le code API force aussi `search_path=public` côté connexion PostgreSQL, mais la base doit quand même contenir un schéma `public` utilisable.
 
 ## Créer le service API
 
