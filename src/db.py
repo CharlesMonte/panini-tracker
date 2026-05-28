@@ -4,6 +4,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 
 from sqlalchemy import create_engine, event
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -13,7 +14,7 @@ from src.models import Base
 
 def _engine_options() -> dict:
     if settings.database_url.startswith("postgresql"):
-        return {"connect_args": {"options": "-csearch_path=public"}}
+        return {"connect_args": {"options": "-c search_path=public"}}
     return {}
 
 
@@ -30,6 +31,12 @@ def _set_sqlite_pragma(dbapi_connection, connection_record) -> None:
 
 
 def init_db() -> None:
+    if engine.url.get_backend_name().startswith("postgresql"):
+        with engine.begin() as connection:
+            connection.execute(text("CREATE SCHEMA IF NOT EXISTS public"))
+            connection.execute(text("SET search_path TO public"))
+            Base.metadata.create_all(bind=connection)
+        return
     Base.metadata.create_all(bind=engine)
 
 

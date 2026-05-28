@@ -22,8 +22,17 @@ Exporter la base locale actuelle :
 
 ```bash
 mkdir -p backups
-docker compose exec -T db pg_dump -U panini -d panini --no-owner --no-acl > backups/panini_northflank.sql
+docker compose exec -T db pg_dump \
+  -U panini \
+  -d panini \
+  --clean \
+  --if-exists \
+  --no-owner \
+  --no-acl \
+  > backups/panini_northflank.sql
 ```
+
+Les options `--clean --if-exists` permettent de rejouer le dump sur une DB qui contient déjà des tables ou contraintes.
 
 ## Créer le projet Northflank
 
@@ -47,17 +56,60 @@ postgresql+psycopg://...
 
 ## Restaurer la base
 
-Depuis votre machine :
+Avant une restauration complète, couper temporairement le service `api` dans Northflank. Cela évite que l'application ouvre des connexions ou recrée des tables pendant la restauration.
+
+Réinitialiser d'abord le schéma `public` de la base Northflank :
 
 ```bash
-psql "DATABASE_URL_NORTHFLANK" < backups/panini_northflank.sql
+docker run --rm -i postgres:16 psql "DATABASE_URL_NORTHFLANK" <<'SQL'
+DROP SCHEMA IF EXISTS public CASCADE;
+CREATE SCHEMA public;
+GRANT USAGE, CREATE ON SCHEMA public TO CURRENT_USER;
+ALTER ROLE CURRENT_USER SET search_path TO public;
+SET search_path TO public;
+SQL
 ```
 
-Si `psql` n'est pas installé localement, utiliser un conteneur Docker temporaire :
+Restaurer ensuite le dump :
 
 ```bash
 docker run --rm -i postgres:16 psql "DATABASE_URL_NORTHFLANK" < backups/panini_northflank.sql
 ```
+
+Relancer ensuite le service `api`.
+
+Si `psql` est installé localement, les mêmes commandes peuvent être exécutées avec `psql "DATABASE_URL_NORTHFLANK"` au lieu du conteneur Docker.
+
+### Erreurs fréquentes de restauration
+
+Si vous voyez des erreurs comme :
+
+```text
+ERROR: constraint "holdings_person_id_fkey" for relation "holdings" already exists
+ERROR: constraint "trades_person_a_id_fkey" for relation "trades" already exists
+```
+
+c'est que le dump a été restauré par-dessus une base qui contenait déjà le schéma. Refaire un dump avec `--clean --if-exists`, ou exécuter la réinitialisation du schéma `public` ci-dessus avant la restauration.
+
+Si le service `api` démarre avec :
+
+```text
+psycopg.errors.InvalidSchemaName: no schema has been selected to create in
+LINE 2: CREATE TABLE people (
+```
+
+le schéma `public` existe mal, n'a pas les bons droits, ou n'est pas dans le `search_path`. Couper le service `api`, puis réparer la base :
+
+```bash
+docker run --rm -i postgres:16 psql "DATABASE_URL_NORTHFLANK" <<'SQL'
+CREATE SCHEMA IF NOT EXISTS public;
+GRANT USAGE, CREATE ON SCHEMA public TO CURRENT_USER;
+ALTER ROLE CURRENT_USER SET search_path TO public;
+SET search_path TO public;
+SQL
+```
+
+Le code API force aussi `search_path=public` côté connexion PostgreSQL, mais la réparation SQL reste utile si la base a été recréée manuellement.
 
 ## Créer le service API
 
